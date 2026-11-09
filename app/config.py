@@ -1,0 +1,45 @@
+from functools import lru_cache
+from typing import Optional
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """Application configuration loaded from environment variables."""
+
+    app_name: str = "Studium-Notifications"
+    environment: str = "Production"
+    port: int = 8080
+    host: str = "0.0.0.0"
+
+    # AWS Configuration
+    aws_region: str = "us-east-2"
+    aws_endpoint_url: Optional[str] = None
+    aws_access_key_id: Optional[str] = None
+    aws_secret_access_key: Optional[str] = None
+
+    # SQS Messaging
+    aws_sqs_notifications_queue_name: str = "studium-notifications-queue"
+    aws_sqs_queue_url: Optional[str] = None
+    sqs_wait_time_seconds: int = 20
+    sqs_max_messages: int = 10
+    sqs_poll_interval_seconds: int = 1
+
+    # Amazon DynamoDB
+    dynamodb_table_name: str = "studium_notifications"
+
+    # Email / SES simulation
+    simulate_ses_email: bool = True
+    ses_sender_email: str = "notifications@studium.pucpr.br"
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        env_prefix="",
+        case_sensitive=False,
+    )
+
+
+@lru_cache()
+def get_settings() -> Settings:
+    return Settings()
