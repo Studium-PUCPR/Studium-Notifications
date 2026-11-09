@@ -8,6 +8,7 @@ except ImportError:
     pytest = None
 from app.consumer.wolverine_unpack import (
     read_7bit_encoded_int,
+    unpack_rabbitmq_message,
     unpack_sqs_message,
     unpack_wolverine_envelope_bytes,
 )
@@ -106,3 +107,32 @@ def test_unpack_sns_wrapped_json():
 
     assert extracted_payload["eventType"] == "ReservationCancelled"
     assert extracted_payload["userId"] == "student-3"
+
+
+def test_unpack_rabbitmq_binary_envelope():
+    payload = {"bookingId": "bk-999", "userId": "prof-1", "eventType": "ReservationCreated"}
+    base64_msg = create_mock_wolverine_base64_envelope(
+        message_type="studium.booking.reservation-notification",
+        payload_dict=payload,
+        correlation_id="corr-rabbit-1",
+    )
+    raw_bytes = base64.b64decode(base64_msg)
+
+    msg_type, headers, extracted_payload = unpack_rabbitmq_message(raw_bytes)
+
+    assert msg_type == "studium.booking.reservation-notification"
+    assert headers["correlation-id"] == "corr-rabbit-1"
+    assert extracted_payload["bookingId"] == "bk-999"
+    assert extracted_payload["userId"] == "prof-1"
+
+
+def test_unpack_rabbitmq_json_body():
+    payload = {"eventType": "UserBlocked", "userId": "student-blocked"}
+    raw_bytes = json.dumps(payload).encode("utf-8")
+    amqp_headers = {"message-type": "studium.users.user-status-changed"}
+
+    msg_type, headers, extracted_payload = unpack_rabbitmq_message(raw_bytes, amqp_headers)
+
+    assert msg_type == "studium.users.user-status-changed"
+    assert extracted_payload["userId"] == "student-blocked"
+

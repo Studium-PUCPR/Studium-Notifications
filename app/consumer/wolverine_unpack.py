@@ -127,3 +127,63 @@ def unpack_sqs_message(
     except Exception as e:
         logger.error(f"Failed to unpack message body as Wolverine envelope: {e}")
         raise ValueError(f"Could not unpack message body as JSON or Wolverine envelope: {e}") from e
+
+
+def unpack_rabbitmq_message(
+    body_bytes: bytes, amqp_headers: Optional[Dict[str, Any]] = None
+) -> Tuple[str, Dict[str, str], Dict[str, Any]]:
+    """
+    Extracts (message_type, headers, payload_dict) from a RabbitMQ AMQP message.
+    Supports:
+      1. Binary Wolverine Envelope (starts with 8-byte header identifier).
+      2. UTF-8 JSON body.
+      3. Base64 encoded Wolverine envelope.
+    """
+    headers: Dict[str, str] = {}
+    if amqp_headers:
+        for k, v in amqp_headers.items():
+            headers[str(k)] = str(v)
+
+    # 1. Try unpacking as raw Wolverine binary envelope
+    if len(body_bytes) >= 12:
+        try:
+            msg_type, env_headers, payload = unpack_wolverine_envelope_bytes(body_bytes)
+            merged_headers = {**headers, **env_headers}
+            return msg_type, merged_headers, payload
+        except Exception:
+            pass
+
+    # 2. Try UTF-8 decode
+    text = ""
+    try:
+        text = body_bytes.decode("utf-8").strip()
+    except Exception:
+        pass
+
+    if text:
+        # Check if direct JSON
+        if text.startswith("{") and text.endswith("}"):
+            try:
+                parsed_json = json.loads(text)
+                msg_type = (
+                    headers.get("message-type")
+                    or parsed_json.get("type")
+                    or parsed_json.get("messageType")
+                    or parsed_json.get("eventType")
+                    or parsed_json.get("$type")
+                    or ""
+                )
+                payload = parsed_json.get("data", parsed_json)
+                return msg_type, headers, payload
+            except Exception:
+                pass
+
+        # Try base64
+        try:
+            raw_bytes = base64.b64decode(text)
+            msg_type, env_headers, payload = unpack_wolverine_envelope_bytes(raw_bytes)
+            return msg_type, {**headers, **env_headers}, payload
+        except Exception:
+            pass
+
+    raise ValueError(f"Could not unpack RabbitMQ message ({len(body_bytes)} bytes)")

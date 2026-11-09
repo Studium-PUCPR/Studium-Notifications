@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.routes import get_dynamo_service, router as notifications_router
 from app.config import get_settings
-from app.consumer.worker import SqsNotificationWorker
+from app.consumer.worker import RabbitMqNotificationWorker
 from app.services.dynamodb_service import DynamoDbService
 
 # Configure logging
@@ -19,12 +19,12 @@ logger = logging.getLogger("studium.notifications")
 
 settings = get_settings()
 dynamo_service = DynamoDbService(settings)
-worker = SqsNotificationWorker(settings, dynamo_service=dynamo_service)
+worker = RabbitMqNotificationWorker(settings, dynamo_service=dynamo_service)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Manages application lifecycle: DynamoDB table verification & background SQS consumer."""
+    """Manages application lifecycle: DynamoDB table verification & background RabbitMQ consumer."""
     logger.info("Initializing Studium-Notifications service...")
 
     # 1. Ensure DynamoDB table exists
@@ -36,11 +36,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             "Continuing startup (will retry on incoming requests)."
         )
 
-    # 2. Start SQS worker
+    # 2. Start RabbitMQ consumer worker
     try:
         await worker.start()
     except Exception as e:
-        logger.warning(f"Could not start SQS background worker on startup: {e}. Continuing startup.")
+        logger.warning(f"Could not start RabbitMQ background worker on startup: {e}. Continuing startup.")
 
     yield
 

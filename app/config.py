@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     sqs_max_messages: int = 10
     sqs_poll_interval_seconds: int = 1
 
+    # RabbitMQ Messaging
+    rabbitmq_url: str = "amqp://studium:StudiumRabbitMQ2026!@studium-rabbitmq-service.studium.svc.cluster.local:5672"
+    rabbitmq_notifications_queue_name: str = "studium-notifications-queue"
+
     # Amazon DynamoDB
     dynamodb_table_name: str = "studium_notifications"
 

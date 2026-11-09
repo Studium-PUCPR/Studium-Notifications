@@ -5,7 +5,7 @@ import boto3
 from botocore.exceptions import ClientError
 from app.config import Settings, get_settings
 from app.consumer.handlers import route_event_to_notification
-from app.consumer.wolverine_unpack import unpack_sqs_message
+from app.consumer.wolverine_unpack import unpack_rabbitmq_message, unpack_sqs_message
 from app.services.dynamodb_service import DynamoDbService
 from app.services.email_service import EmailService
 
@@ -147,3 +147,82 @@ class SqsNotificationWorker:
         except Exception as e:
             logger.error(f"Failed to process message {message.get('MessageId')}: {e}", exc_info=True)
             # Message will remain in SQS and reappear after visibility timeout or move to DLQ
+
+
+class RabbitMqNotificationWorker:
+    """Background worker that continuously consumes messages from RabbitMQ studium-notifications-queue."""
+
+    def __init__(
+        self,
+        settings: Optional[Settings] = None,
+        dynamo_service: Optional[DynamoDbService] = None,
+        email_service: Optional[EmailService] = None,
+    ):
+        self.settings = settings or get_settings()
+        self.dynamo = dynamo_service or DynamoDbService(self.settings)
+        self.email = email_service or EmailService(self.settings)
+        self.running = False
+        self._task: Optional[asyncio.Task] = None
+        self.connection: Optional[Any] = None
+
+    async def start(self) -> None:
+        """Starts the RabbitMQ background consumer loop."""
+        self.running = True
+        self._task = asyncio.create_task(self._consume_loop())
+        logger.info("RabbitMQ Notification Worker started.")
+
+    async def stop(self) -> None:
+        """Stops the consumer loop cleanly."""
+        self.running = False
+        if self._task and not self._task.done():
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+        if self.connection and not self.connection.is_closed:
+            await self.connection.close()
+        logger.info("RabbitMQ Notification Worker stopped.")
+
+    async def _consume_loop(self) -> None:
+        queue_name = self.settings.rabbitmq_notifications_queue_name
+        loop = asyncio.get_running_loop()
+
+        while self.running:
+            try:
+                import aio_pika
+
+                logger.info(f"Connecting to RabbitMQ at '{self.settings.rabbitmq_url}'...")
+                self.connection = await aio_pika.connect_robust(self.settings.rabbitmq_url)
+                async with self.connection:
+                    channel = await self.connection.channel()
+                    await channel.set_qos(prefetch_count=10)
+                    queue = await channel.declare_queue(queue_name, durable=True)
+                    logger.info(f"Listening on RabbitMQ queue '{queue_name}'...")
+
+                    async with queue.iterator() as queue_iter:
+                        async for message in queue_iter:
+                            if not self.running:
+                                break
+                            async with message.process():
+                                try:
+                                    msg_type, headers, payload = unpack_rabbitmq_message(
+                                        message.body, message.headers
+                                    )
+                                    logger.info(f"Processing RabbitMQ message of type '{msg_type}'.")
+                                    notification = route_event_to_notification(msg_type, payload, headers)
+                                    if notification:
+                                        await loop.run_in_executor(None, self.dynamo.save_notification, notification)
+                                        await loop.run_in_executor(None, self.email.send_notification_email, notification)
+                                        logger.info(
+                                            f"Notification '{notification.notification_id}' saved and email dispatched."
+                                        )
+                                except Exception as e:
+                                    logger.error(f"Error processing RabbitMQ message: {e}", exc_info=True)
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning(f"RabbitMQ connection error: {e}. Retrying in 5 seconds...")
+                await asyncio.sleep(5)
+
