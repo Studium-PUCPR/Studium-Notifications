@@ -19,9 +19,14 @@ logger = logging.getLogger("studium.notifications.api")
 
 router = APIRouter(prefix="/api/notifications", tags=["Notifications"])
 
+_dynamo_service_instance: Optional[DynamoDbService] = None
+
 
 def get_dynamo_service() -> DynamoDbService:
-    return DynamoDbService()
+    global _dynamo_service_instance
+    if _dynamo_service_instance is None:
+        _dynamo_service_instance = DynamoDbService()
+    return _dynamo_service_instance
 
 
 @router.get("", response_model=NotificationListResponse)
@@ -54,6 +59,7 @@ def get_user_notifications(
                     data=row.get("data", {}),
                     is_read=is_read,
                     created_at=row.get("created_at", ""),
+                    ttl=row.get("ttl"),
                 )
             )
 
@@ -93,6 +99,7 @@ def get_notification_by_id(
         data=item.get("data", {}),
         is_read=bool(item.get("is_read", False)),
         created_at=item.get("created_at", ""),
+        ttl=item.get("ttl"),
     )
 
 
@@ -144,6 +151,7 @@ def create_notification(
         data=saved["data"],
         is_read=saved["is_read"],
         created_at=saved["created_at"],
+        ttl=saved.get("ttl"),
     )
 
 
@@ -177,4 +185,5 @@ def create_test_notification(
         data=saved["data"],
         is_read=saved["is_read"],
         created_at=saved["created_at"],
+        ttl=saved.get("ttl"),
     )

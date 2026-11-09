@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import logging
 from typing import Any, Dict, List, Optional
 import boto3
@@ -70,8 +71,22 @@ class DynamoDbService:
                 logger.error(f"Error checking DynamoDB table '{self.table_name}': {e}")
                 raise
 
+        try:
+            self.client.update_time_to_live(
+                TableName=self.table_name,
+                TimeToLiveSpecification={
+                    "Enabled": True,
+                    "AttributeName": "ttl",
+                },
+            )
+            logger.info(f"TTL enabled on attribute 'ttl' for DynamoDB table '{self.table_name}'.")
+        except ClientError as e:
+            logger.debug(f"TTL configuration status for '{self.table_name}': {e}")
+
     def save_notification(self, item: NotificationItem) -> Dict[str, Any]:
-        """Saves a notification to DynamoDB."""
+        """Saves a notification to DynamoDB with a 3-day TTL."""
+        now_epoch = int(datetime.now(timezone.utc).timestamp())
+        ttl_epoch = item.ttl if item.ttl is not None else now_epoch + (3 * 24 * 60 * 60)
         doc = {
             "notification_id": item.notification_id,
             "user_id": item.user_id,
@@ -81,9 +96,10 @@ class DynamoDbService:
             "data": item.data,
             "is_read": item.is_read,
             "created_at": item.created_at,
+            "ttl": ttl_epoch,
         }
         self.table.put_item(Item=doc)
-        logger.info(f"Notification '{item.notification_id}' saved for user '{item.user_id}'.")
+        logger.info(f"Notification '{item.notification_id}' saved for user '{item.user_id}' with TTL {ttl_epoch}.")
         return doc
 
     def get_user_notifications(self, user_id: str, limit: int = 50) -> List[Dict[str, Any]]:

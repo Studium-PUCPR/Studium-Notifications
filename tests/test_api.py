@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 import pytest
 from fastapi.testclient import TestClient
@@ -16,6 +17,8 @@ class InMemoryDynamoDbService:
         pass
 
     def save_notification(self, item: NotificationItem) -> Dict[str, Any]:
+        now_epoch = int(datetime.now(timezone.utc).timestamp())
+        ttl_epoch = item.ttl if item.ttl is not None else now_epoch + (3 * 24 * 60 * 60)
         doc = {
             "notification_id": item.notification_id,
             "user_id": item.user_id,
@@ -25,6 +28,7 @@ class InMemoryDynamoDbService:
             "data": item.data,
             "is_read": item.is_read,
             "created_at": item.created_at,
+            "ttl": ttl_epoch,
         }
         self.items[item.notification_id] = doc
         return doc
@@ -61,12 +65,19 @@ def clean_mock_db():
     mock_db.items.clear()
 
 
-def test_health_endpoint():
+def test_health_endpoints():
+    # Shallow liveness
     response = client.get("/health")
     assert response.status_code == 200
     data = response.json()
     assert data["service"] == "Studium-Notifications"
-    assert data["status"] in ("Healthy", "Degraded")
+    assert data["status"] == "Healthy"
+
+    # Deep readiness
+    ready_resp = client.get("/health/ready")
+    assert ready_resp.status_code == 200
+    ready_data = ready_resp.json()
+    assert ready_data["dynamodb"] == "Connected"
 
 
 def test_create_and_get_notifications():
@@ -83,6 +94,8 @@ def test_create_and_get_notifications():
     created_data = create_resp.json()
     notif_id = created_data["notification_id"]
     assert created_data["is_read"] is False
+    assert created_data["ttl"] is not None
+    assert created_data["ttl"] > int(datetime.now(timezone.utc).timestamp())
 
     # 2. Query user notifications
     get_resp = client.get("/api/notifications", params={"user_id": "test-student-1"})
@@ -92,6 +105,7 @@ def test_create_and_get_notifications():
     assert feed["total_count"] == 1
     assert feed["unread_count"] == 1
     assert feed["items"][0]["notification_id"] == notif_id
+    assert feed["items"][0]["ttl"] == created_data["ttl"]
 
     # 3. Mark notification as read
     patch_resp = client.patch(f"/api/notifications/{notif_id}/read")

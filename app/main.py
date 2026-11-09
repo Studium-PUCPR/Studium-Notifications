@@ -16,7 +16,7 @@ logging.basicConfig(
 logger = logging.getLogger("studium.notifications")
 
 settings = get_settings()
-dynamo_service = DynamoDbService(settings)
+dynamo_service = get_dynamo_service()
 
 
 @asynccontextmanager
@@ -55,10 +55,23 @@ app.include_router(notifications_router)
 
 
 @app.get("/health", tags=["Health"], status_code=status.HTTP_200_OK)
-def health_check(
+def liveness_check() -> JSONResponse:
+    """Kubernetes liveness probe endpoint."""
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={
+            "status": "Healthy",
+            "service": "Studium-Notifications",
+            "environment": settings.environment,
+        },
+    )
+
+
+@app.get("/health/ready", tags=["Health"], status_code=status.HTTP_200_OK)
+def readiness_check(
     dynamo: DynamoDbService = Depends(get_dynamo_service),
 ) -> JSONResponse:
-    """Kubernetes liveness and readiness probe endpoint."""
+    """Kubernetes readiness probe endpoint verifying DynamoDB connectivity."""
     dynamo_healthy = dynamo.ping()
     is_healthy = dynamo_healthy or settings.environment in ("Development", "Testing")
 

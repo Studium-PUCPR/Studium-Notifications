@@ -23,6 +23,7 @@ class NotificationItem(BaseModel):
     data: Dict[str, Any] = Field(default_factory=dict)
     is_read: bool = False
     created_at: str
+    ttl: Optional[int] = None
 
 
 class NotificationResponse(BaseModel):
@@ -34,6 +35,7 @@ class NotificationResponse(BaseModel):
     data: Dict[str, Any]
     is_read: bool
     created_at: str
+    ttl: Optional[int] = None
 
 
 class NotificationListResponse(BaseModel):
