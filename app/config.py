@@ -1,6 +1,6 @@
+import json
 from functools import lru_cache
 from typing import Optional
-from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,18 +26,21 @@ class Settings(BaseSettings):
     ses_sender_email: str = "notifications@studium.pucpr.br"
 
     # CORS Configuration
-    cors_allowed_origins: list[str] = ["*"]
+    cors_allowed_origins: str = "*"
 
-    @field_validator("cors_allowed_origins", mode="before")
-    @classmethod
-    def parse_cors_allowed_origins(cls, v: object) -> list[str]:
-        if isinstance(v, str):
-            if not v.strip():
-                return ["*"]
-            return [origin.strip() for origin in v.split(",") if origin.strip()]
-        if isinstance(v, list):
-            return [str(origin).strip() for origin in v]
-        return ["*"]
+    @property
+    def parsed_cors_origins(self) -> list[str]:
+        raw = self.cors_allowed_origins.strip()
+        if not raw or raw == "*":
+            return ["*"]
+        if raw.startswith("[") and raw.endswith("]"):
+            try:
+                parsed = json.loads(raw)
+                if isinstance(parsed, list):
+                    return [str(o).strip() for o in parsed if str(o).strip()]
+            except Exception:
+                pass
+        return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
     model_config = SettingsConfigDict(
         env_file=".env",
