@@ -49,6 +49,18 @@ class MarkAsReadResponse(BaseModel):
     message: str
 
 
+class CreateNotificationRequest(BaseModel):
+    user_id: str = Field(..., alias="userId")
+    type: NotificationType = NotificationType.SYSTEM_ALERT
+    title: str
+    message: str
+    data: Optional[Dict[str, Any]] = None
+
+    model_config = {
+        "populate_by_name": True
+    }
+
+
 class CreateTestNotificationRequest(BaseModel):
     user_id: str
     type: NotificationType = NotificationType.SYSTEM_ALERT

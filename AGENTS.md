@@ -24,7 +24,11 @@
 - **Chosen Solution:** Uses `aio-pika` for async AMQP consumption. Features `unpack_rabbitmq_message` in `wolverine_unpack.py` capable of decoding both Wolverine .NET binary envelopes and JSON payloads.
 - **Legacy branch:** AWS SQS version preserved on branch `origin/sqs`.
 
-### 1.4 Background Worker & Lifespan Architecture
+### 1.4 Synchronous REST Notification Ingestion (`POST /api/notifications`)
+- **Problem Solved:** Enables synchronous HTTP notification dispatch from internal microservices (such as `Studium-Booking` or `Studium-Users`) and external administrative callers without creating duplicate internal/external endpoints.
+- **Chosen Solution:** Standard canonical `POST /api/notifications` endpoint supporting dual camelCase (`userId`) and snake_case (`user_id`) schemas.
+
+### 1.5 Background Worker & Lifespan Architecture
 - Uses FastAPI lifespan context manager (`@asynccontextmanager`) to manage the background `RabbitMqNotificationWorker`.
 - Automatically provisions the DynamoDB table if it does not exist on initial startup.
 - Connects robustly to RabbitMQ, processes messages, persists items in DynamoDB, and dispatches simulated email alerts.
@@ -35,32 +39,29 @@
 - **`app/`:**
   - `main.py` — Composition root, FastAPI app, CORS, lifespan startup/shutdown, and `/health` probe.
   - `config.py` — Pydantic `BaseSettings` reading environment variables (RabbitMQ URL, DynamoDB table).
-  - `models/notification.py` — Pydantic domain models: `NotificationType`, `NotificationItem`, `NotificationResponse`, `NotificationListResponse`.
+  - `models/notification.py` — Pydantic domain models: `NotificationType`, `NotificationItem`, `NotificationResponse`, `NotificationListResponse`, `CreateNotificationRequest`.
   - `consumer/wolverine_unpack.py` — Binary Wolverine C# envelope decoder, RabbitMQ unpacker, and JSON parser.
   - `consumer/handlers.py` — Event dispatchers transforming incoming events into localized student notifications.
   - `consumer/worker.py` — Async background consumer loop over RabbitMQ queue using `aio-pika`.
   - `services/dynamodb_service.py` — DynamoDB table management, put_item, query, update_item, and ping.
   - `services/email_service.py` — SES / simulated email dispatcher.
-  - `api/routes.py` — REST endpoints (`GET /api/notifications`, `PATCH /api/notifications/{id}/read`, `POST /api/notifications/test`).
+  - `api/routes.py` — REST endpoints (`GET /api/notifications`, `POST /api/notifications`, `PATCH /api/notifications/{id}/read`, `POST /api/notifications/test`).
 - **`tests/`:**
   - `test_wolverine_unpack.py` — Tests decoding Wolverine binary envelopes, raw JSON, and RabbitMQ payloads.
   - `test_handlers.py` — Tests event mapping (ReservationCreated, NoShowRecorded, WaitlistSlotAvailable, RoomMaintenance).
-  - `test_api.py` — FastAPI TestClient testing health probe and notification feed CRUD.
+  - `test_api.py` — FastAPI TestClient testing health probe, notification feed CRUD, and synchronous notification creation.
 - [`Dockerfile`](./Dockerfile) — Multi-stage production container with Python 3.12-slim and non-root user.
 - [`k8s/deployment.yaml`](./k8s/deployment.yaml) — Kubernetes Deployment, ClusterIP Service, and ConfigMap.
-- [`.github/workflows/ci-cd.yml`](./.github/workflows/ci-cd.yml) — GitHub Actions CI/CD pipeline.
-- [`requirements.txt`](./requirements.txt) — Dependency specifications including `aio-pika`.
-- [`README.md`](./README.md) — Architectural overview, rubric mapping, and local setup guide.
 
 ---
 
 ## 3. Recent Changes History
-- **2026-11-09 (Migrated Messaging from AWS SQS to RabbitMQ):**
-  - Added `aio-pika` to `requirements.txt` and environment.
-  - Implemented `RabbitMqNotificationWorker` in `app/consumer/worker.py` and `unpack_rabbitmq_message` in `app/consumer/wolverine_unpack.py`.
-  - Updated `app/main.py` to start and manage `RabbitMqNotificationWorker` during app lifespan.
-  - Updated `k8s/deployment.yaml` with `RABBITMQ_URL` and `RABBITMQ_NOTIFICATIONS_QUEUE_NAME`.
-  - Added unit tests in `test_wolverine_unpack.py` for RabbitMQ message unpacking; all 12 tests passing.
-  - SQS version preserved on branch `origin/sqs`.
-- **2026-11-09 (Initial Microservice Implementation):**
-  - Scaffolded `Studium-Notifications` in Python 3.12 with FastAPI and Amazon DynamoDB, fulfilling Rubric R1.
+- **2026-11-08 (Initial Implementation & Deployment):**
+  - Scaffolded Python 3.12 + FastAPI microservice with Amazon DynamoDB and Wolverine SQS unpacker.
+  - Verified 12 unit tests and deployed to EKS cluster.
+- **2026-11-09 (RabbitMQ Migration & SQS Storage Branch):**
+  - Migrated async consumer to `aio-pika` over RabbitMQ AMQP broker (`studium-rabbitmq-service:5672`).
+  - Stored original AWS SQS configuration on branch `origin/sqs`.
+- **2026-11-09 (Added Canonical Synchronous Notification Creation):**
+  - Implemented `POST /api/notifications` supporting `CreateNotificationRequest` with dual `userId`/`user_id` aliases.
+  - Added unit test `test_create_notification_canonical` in `tests/test_api.py` (13/13 tests passing).

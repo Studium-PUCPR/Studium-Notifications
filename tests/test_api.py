@@ -101,3 +101,20 @@ def test_create_and_get_notifications():
     # 4. Query again and verify unread count is now 0
     get_resp_after = client.get("/api/notifications", params={"user_id": "test-student-1"})
     assert get_resp_after.json()["unread_count"] == 0
+
+
+def test_create_notification_canonical():
+    payload = {
+        "userId": "user-456",
+        "type": "NO_SHOW_RECORDED",
+        "title": "Prazo de Confirmação Expirado",
+        "message": "Você não confirmou a presença na reserva a tempo.",
+        "data": {"bookingId": "b-123"}
+    }
+    resp = client.post("/api/notifications", json=payload)
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["user_id"] == "user-456"
+    assert body["type"] == "NO_SHOW_RECORDED"
+    assert body["title"] == "Prazo de Confirmação Expirado"
+    assert body["is_read"] is False

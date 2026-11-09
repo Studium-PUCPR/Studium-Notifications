@@ -5,6 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.models.notification import (
+    CreateNotificationRequest,
     CreateTestNotificationRequest,
     MarkAsReadResponse,
     NotificationItem,
@@ -113,6 +114,36 @@ def mark_notification_as_read(
         notification_id=notification_id,
         is_read=True,
         message="Notification marked as read successfully.",
+    )
+
+
+@router.post("", response_model=NotificationResponse, status_code=status.HTTP_201_CREATED)
+def create_notification(
+    request: CreateNotificationRequest,
+    dynamo: DynamoDbService = Depends(get_dynamo_service),
+) -> NotificationResponse:
+    """Dispatches and persists a new notification synchronously."""
+    item = NotificationItem(
+        notification_id=str(uuid.uuid4()),
+        user_id=request.user_id,
+        type=request.type,
+        title=request.title,
+        message=request.message,
+        data=request.data or {},
+        is_read=False,
+        created_at=datetime.now(timezone.utc).isoformat(),
+    )
+
+    saved = dynamo.save_notification(item)
+    return NotificationResponse(
+        notification_id=saved["notification_id"],
+        user_id=saved["user_id"],
+        type=NotificationType(saved["type"]),
+        title=saved["title"],
+        message=saved["message"],
+        data=saved["data"],
+        is_read=saved["is_read"],
+        created_at=saved["created_at"],
     )
 
 
