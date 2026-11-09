@@ -17,17 +17,6 @@ class Settings(BaseSettings):
     aws_access_key_id: Optional[str] = None
     aws_secret_access_key: Optional[str] = None
 
-    # SQS Messaging
-    aws_sqs_notifications_queue_name: str = "studium-notifications-queue"
-    aws_sqs_queue_url: Optional[str] = None
-    sqs_wait_time_seconds: int = 20
-    sqs_max_messages: int = 10
-    sqs_poll_interval_seconds: int = 1
-
-    # RabbitMQ Messaging
-    rabbitmq_url: str = "amqp://studium:StudiumRabbitMQ2026!@studium-rabbitmq-service.studium.svc.cluster.local:5672"
-    rabbitmq_notifications_queue_name: str = "studium-notifications-queue"
-
     # Amazon DynamoDB
     dynamodb_table_name: str = "studium_notifications"
 

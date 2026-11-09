@@ -11,8 +11,6 @@ metadata:
 data:
   ENVIRONMENT: "Production"
   AWS_REGION: "us-east-2"
-  RABBITMQ_URL: "amqp://studium:StudiumRabbitMQ2026!@studium-rabbitmq-service.studium.svc.cluster.local:5672"
-  RABBITMQ_NOTIFICATIONS_QUEUE_NAME: "studium-notifications-queue"
   DYNAMODB_TABLE_NAME: "studium_notifications"
   SIMULATE_SES_EMAIL: "true"
   SES_SENDER_EMAIL: "notifications@studium.pucpr.br"
