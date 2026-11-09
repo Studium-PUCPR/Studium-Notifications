@@ -132,3 +132,16 @@ def test_create_notification_canonical():
     assert body["type"] == "NO_SHOW_RECORDED"
     assert body["title"] == "Prazo de Confirmação Expirado"
     assert body["is_read"] is False
+
+
+def test_cors_settings_parsing():
+    from app.config import Settings
+
+    s1 = Settings(cors_allowed_origins="http://localhost:3000, https://studium.pucpr.br")
+    assert s1.cors_allowed_origins == ["http://localhost:3000", "https://studium.pucpr.br"]
+
+    s2 = Settings(cors_allowed_origins="")
+    assert s2.cors_allowed_origins == ["*"]
+
+    s3 = Settings(cors_allowed_origins=["http://test.com"])
+    assert s3.cors_allowed_origins == ["http://test.com"]

@@ -28,24 +28,32 @@
 - **Problem Solved:** Eliminates the complexity and cognitive clutter of decoding .NET Wolverine binary envelopes in Python (`wolverine_unpack.py`). Provides a dedicated synchronous REST endpoint (`POST /api/notifications`) for upstream .NET microservices (`Studium-Booking`, `Studium-Users`, `Studium-Catalog`), satisfying the requirement for synchronous inter-service communication.
 - **Legacy branch:** AWS SQS and RabbitMQ consumer versions are preserved on branches `origin/sqs` and git commit history.
 
+### 1.5 Dynamic CORS Configuration
+- **Decision:** Added `cors_allowed_origins` setting in `Settings` (`app/config.py`) supporting comma-separated string or list input from environment variable `CORS_ALLOWED_ORIGINS` (defaulting to wildcard `*`). Bound dynamically to FastAPI `CORSMiddleware` in `app/main.py`.
+
 ---
 
 ## 2. Project Structure & File Map
 - **`app/`:**
-  - `main.py` — Composition root, FastAPI app, CORS, lifespan table verification, `/health` liveness, and `/health/ready` readiness probe.
-  - `config.py` — Pydantic `BaseSettings` reading environment variables (DynamoDB table, AWS credentials).
+  - `main.py` — Composition root, FastAPI app, dynamic CORS, lifespan table verification, `/health` liveness, and `/health/ready` readiness probe.
+  - `config.py` — Pydantic `BaseSettings` reading environment variables (DynamoDB table, AWS credentials, CORS origins).
   - `models/notification.py` — Pydantic domain models: `NotificationType`, `NotificationItem`, `NotificationResponse`, `NotificationListResponse`, `CreateNotificationRequest`.
   - `services/dynamodb_service.py` — DynamoDB table management, put_item with 3-day TTL, query, update_item, and ping.
   - `services/email_service.py` — SES / simulated email dispatcher.
   - `api/routes.py` — REST endpoints (`GET /api/notifications`, `POST /api/notifications`, `PATCH /api/notifications/{id}/read`, `POST /api/notifications/test`) with singleton dependency injection.
 - **`tests/`:**
-  - `test_api.py` — FastAPI TestClient testing health probe, readiness probe, notification feed CRUD, and 3-day TTL expiration.
+  - `test_api.py` — FastAPI TestClient testing health probe, readiness probe, notification feed CRUD, CORS parsing, and 3-day TTL expiration.
 - [`Dockerfile`](./Dockerfile) — Multi-stage production container with Python 3.12-slim and non-root user.
-- [`k8s/deployment.yaml`](./k8s/deployment.yaml) — Kubernetes Deployment, ClusterIP Service, and ConfigMap with readiness probe configured to `/health/ready`.
+- [`k8s/deployment.yaml`](./k8s/deployment.yaml) — Kubernetes Deployment, ClusterIP Service, and ConfigMap with readiness probe configured to `/health/ready` and `CORS_ALLOWED_ORIGINS`.
 
 ---
 
 ## 3. Recent Changes History
+- **2026-11-09 (Dynamic CORS Configuration):**
+  - Added `cors_allowed_origins` to `Settings` with field validator for comma-separated environment variables.
+  - Configured FastAPI `CORSMiddleware` with dynamic origins and credential handling.
+  - Added `CORS_ALLOWED_ORIGINS: "*"` to ConfigMap in `k8s/deployment.yaml`.
+  - Added unit test in `test_api.py`; 4/4 tests pass.
 - **2026-11-09 (DynamoDB 3-Day TTL, Singleton Pooling & Deep Readiness Probe):**
   - Added 3-day TTL attribute `ttl` to `NotificationItem`, `NotificationResponse`, and DynamoDB item persistence (`now + 3 days` epoch seconds).
   - Enabled native DynamoDB TTL on attribute `ttl` in `ensure_table_exists()`.

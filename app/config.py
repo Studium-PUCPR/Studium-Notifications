@@ -1,5 +1,6 @@
 from functools import lru_cache
 from typing import Optional
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,6 +24,20 @@ class Settings(BaseSettings):
     # Email / SES simulation
     simulate_ses_email: bool = True
     ses_sender_email: str = "notifications@studium.pucpr.br"
+
+    # CORS Configuration
+    cors_allowed_origins: list[str] = ["*"]
+
+    @field_validator("cors_allowed_origins", mode="before")
+    @classmethod
+    def parse_cors_allowed_origins(cls, v: object) -> list[str]:
+        if isinstance(v, str):
+            if not v.strip():
+                return ["*"]
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        if isinstance(v, list):
+            return [str(origin).strip() for origin in v]
+        return ["*"]
 
     model_config = SettingsConfigDict(
         env_file=".env",
